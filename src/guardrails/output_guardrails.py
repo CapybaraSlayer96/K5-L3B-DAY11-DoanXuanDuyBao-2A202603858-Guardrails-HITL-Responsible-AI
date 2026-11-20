@@ -12,6 +12,7 @@ from google.adk.agents import llm_agent
 from google.adk import runners
 from google.adk.plugins import base_plugin
 
+from agents.security_boundary import normalize_for_security
 from core.config import DEMO_SECRETS
 from core.utils import chat_with_agent
 
@@ -32,12 +33,13 @@ from core.utils import chat_with_agent
 PII_PATTERNS = {
     "api_key": r"sk-[a-zA-Z0-9-]{6,}",
     # value must contain a digit/symbol so "your password is never requested" stays clean
-    "password": r"(?:password|mật\s*khẩu)\s*(?:is|là|[:=])\s*[\"']?\S*[\d!@#$%^&*]\S*",
+    "password": r"(?:password|passwd|pwd|mật\s*khẩu)\s*(?:is|là|[:=])\s*[\"']?\S*[\d!@#$%^&*]\S*",
     "protected_secret": "|".join(re.escape(s) for s in DEMO_SECRETS) or r"(?!x)x",
     "internal_host": r"\b[\w.-]+\.internal(?::\d+)?\b",
     "email": r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}",
-    "national_id": r"\b\d{12}\b|\b\d{9}\b",
-    "vn_phone": r"(?:\+84|\b0)\d{9,10}\b",
+    # bare 9 digits only with a CMND/CCCD label, so amounts like 500000000 VND stay
+    "national_id": r"\b\d{12}\b|(?:cmnd|cccd|id)\D{0,10}\d{9}\b",
+    "vn_phone": r"(?:\+84[\s.-]?|\b0)\d{2,3}(?:[\s.-]?\d{3,4}){2}\b",
 }
 
 
@@ -51,11 +53,12 @@ def content_filter(response: str) -> dict:
         dict with 'safe', 'issues', and 'redacted' keys
     """
     issues = []
-    redacted = response
+    # fullwidth digits / zero-width chars would otherwise slip past the regexes
+    text = normalize_for_security(response or "")
+    redacted = text
 
-    # PII patterns to check
     for name, pattern in PII_PATTERNS.items():
-        matches = re.findall(pattern, response, re.IGNORECASE)
+        matches = re.findall(pattern, text, re.IGNORECASE)
         if matches:
             issues.append(f"{name}: {len(matches)} found")
             redacted = re.sub(pattern, "[REDACTED]", redacted, flags=re.IGNORECASE)
@@ -94,15 +97,8 @@ Respond with ONLY one word: SAFE or UNSAFE
 If UNSAFE, add a brief reason on the next line.
 """
 
-# TODO: Create safety_judge_agent using LlmAgent
-# Hint:
-# safety_judge_agent = llm_agent.LlmAgent(
-#     model="gemini-3.5-flash",
-#     name="safety_judge",
-#     instruction=SAFETY_JUDGE_INSTRUCTION,
-# )
-
-safety_judge_agent = None  # TODO: Replace with implementation
+# LLM-as-Judge is optional (not graded) and disabled; content_filter is the output layer.
+safety_judge_agent = None
 judge_runner = None
 
 

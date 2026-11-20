@@ -45,27 +45,40 @@ InputStatus = Literal["ALLOW", "BLOCK"]
 # ============================================================
 
 INJECTION_PATTERNS = [
-    r"ignore\s+(all\s+)?(the\s+)?(previous|above|prior|earlier)?\s*(instructions?|rules?|directives?)",
-    r"(disregard|forget|override|bypass)\s+(all\s+)?(your\s+|the\s+)?(previous\s+|prior\s+)?(instructions?|rules?|guidelines?|system\s+prompt)",
-    r"you\s+are\s+now\b",
+    r"ignore\b(?:\W+\w+){0,4}?\W+(instructions?|rules?|directives?|guidelines?)",
+    r"(disregard|forget|override|bypass)\b(?:\W+\w+){0,4}?\W+(instructions?|rules?|guidelines?|system\s+prompt)",
+    r"you\s+are\s+now\s+(an?\s+|in\s+)?(unrestricted|unfiltered|jailbroken|evil|free|dan\b|developer|admin)",
     r"system\s+prompt",
-    r"reveal\s+(your\s+|the\s+)?(instructions?|prompt|config|secrets?|internal)",
+    r"reveal\s+(?:\w+\s+){0,2}?(instructions?|prompt|config|secrets?|internal|credentials?)",
     r"pretend\s+(you\s+are|to\s+be)",
     r"act\s+as\s+(a\s+|an\s+)?(unrestricted|jailbroken|evil|unfiltered)",
     r"\b(DAN|developer\s+mode|jailbreak)\b",
-    r"(admin|internal)\s+(password|credentials?)|api\s*key|connection\s+string|database\s+host",
+    r"(admin|internal)\s+(password|credentials?)|connection\s+string|database\s+host",
+    r"(reveal|show|give|print|tell|what\s+is|list|share)\b.{0,40}\bapi\s*keys?\b(?!\s+polic)",
     r"b[oỏ]\s+qua\s+(m[oọ]i\s+)?(h[uư][oớ]ng\s+d[aẫ]n|quy\s+t[aắ]c)",
     r"ti[eế]t\s+l[oộ]\s+(m[aậ]t\s+kh[aẩ]u|api|th[oô]ng\s+tin\s+n[oộ]i\s+b[oộ])",
 ]
 
 
 def detect_injection(user_input: str) -> InputStatus:
-    """Normalize Unicode (zero-width, NFKC) then regex-match injection. ``"BLOCK"`` | ``"ALLOW"``."""
-    text = normalize_for_security(user_input or "")
+    """Regex-match injection on canonical text and its mark-stripped copy. ``"BLOCK"`` | ``"ALLOW"``."""
+    text = _canonical(user_input)
+    views = (text, _strip_marks(text))
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
+        if any(re.search(pattern, v, re.IGNORECASE) for v in views):
             return "BLOCK"
     return "ALLOW"
+
+
+def _canonical(text: str) -> str:
+    """NFKC + drop every format char (zero-width, soft hyphen, bidi marks)."""
+    text = normalize_for_security(text or "")
+    return "".join(c for c in text if unicodedata.category(c) != "Cf")
+
+
+def _strip_marks(text: str) -> str:
+    """Remove combining marks (Ígnore -> Ignore); also folds Vietnamese accents."""
+    return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
 
 
 # ============================================================
@@ -89,18 +102,21 @@ def topic_filter(user_input: str) -> InputStatus:
         ``"BLOCK"`` = chặn (off-topic hoặc topic cấm).
         ``"ALLOW"`` = cho qua (câu banking hợp lệ).
     """
-    text = _fold_vietnamese(user_input)
+    text = _strip_marks(_canonical(user_input).lower().replace("đ", "d"))
     if any(re.search(rf"\b{re.escape(t)}", text) for t in BLOCKED_TOPICS):
         return "BLOCK"
-    if any(re.search(rf"\b{re.escape(t)}", text) for t in ALLOWED_TOPICS):
+    if any(re.search(rf"\b{re.escape(t)}\b", text) for t in BLUE_EXTRA_TOPICS) or any(
+        re.search(rf"\b{re.escape(t)}", text) for t in ALLOWED_TOPICS
+    ):
         return "ALLOW"
     return "BLOCK"
 
 
-def _fold_vietnamese(text: str) -> str:
-    """Lowercase, strip diacritics (tài khoản -> tai khoan) to match ASCII topic lists."""
-    text = normalize_for_security(text or "").lower().replace("đ", "d")
-    return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+# Blue-only additions; core.config lists stay untouched because Red Advance shares them.
+BLUE_EXTRA_TOPICS = [
+    "withdraw", "fee", "fees", "pin", "iban", "swift", "card", "vinbank", "bank",
+    "chuyen khoan", "rut tien", "phi", "ma pin", "the ngan hang", "tien", "lai",
+]
 
 
 # ============================================================

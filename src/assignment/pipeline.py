@@ -24,12 +24,14 @@ def is_egress_allowed(destination: str, payload: str) -> bool:
     contain a password, API key, database host, phone number or email address.
     Do not let the LLM's prose decide this policy.
     """
+    from agents.red_advance_nemo import mentions_protected_value
     from guardrails.output_guardrails import content_filter
 
     url = urlparse(destination or "")
     if url.scheme != "https" or url.hostname not in TRUSTED_EGRESS_HOSTS:
         return False
-    if contains_secret(payload or ""):
+    # mentions_protected_value also decodes base64 / hex / ROT13 / reversed payloads
+    if contains_secret(payload or "") or mentions_protected_value(payload or ""):
         return False
     return content_filter(payload or "")["safe"]
 

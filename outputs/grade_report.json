@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-20T08:47:22.201809+00:00",
+  "generated_at": "2026-11-20T10:03:40.787722+00:00",
   "submission_dir": "H:\\01_Main_coding_projects\\AI20K\\LAB11\\K5-L3B-DAY11-DoanXuanDuyBao-2A202603858-Guardrails-HITL-Responsible-AI",
   "technical_failure": false,
   "packaging": {
@@ -47,7 +47,7 @@
   },
   "public_tests": {
     "returncode": 0,
-    "stdout": "..........                                                               [100%]\n10 passed in 3.73s\n",
+    "stdout": "..........                                                               [100%]\n10 passed in 4.03s\n",
     "stderr": "",
     "technical_failure": false
   },

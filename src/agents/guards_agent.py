@@ -396,8 +396,10 @@ def create_red_agent_advance():
         return agent, runner
 
     if red_uses_gemini():
+        from core.config import red_gemini_model
+
         agent = llm_agent.LlmAgent(
-            model=advance_model,
+            model=red_gemini_model(advance_model),
             name="red_agent_advance",
             instruction=RED_ADVANCE_INSTRUCTION,
         )

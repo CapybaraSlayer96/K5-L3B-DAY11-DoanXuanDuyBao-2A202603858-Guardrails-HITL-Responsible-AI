@@ -116,6 +116,8 @@ def blue_client_kwargs() -> dict:
     """OpenAI SDK kwargs pointing at OpenRouter (Blue Team only)."""
     return {
         "api_key": get_openrouter_api_key() or None,
+        # free tier often returns transient 429/504; SDK retries with backoff
+        "max_retries": 6,
         "base_url": (
             os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL).strip()
             or OPENROUTER_BASE_URL
@@ -169,8 +171,63 @@ def get_openai_api_key() -> str:
     return os.environ.get("OPENAI_API_KEY", "").strip()
 
 
+def _openai_compat_url(base: str) -> str:
+    """Normalize base URL to an OpenAI-compatible root."""
+    base = base.rstrip("/")
+    # ponytail: googleapis → /v1beta/openai/, any other host assumed OpenAI-style proxy at /v1
+    if base.endswith("googleapis.com"):
+        return base + "/v1beta/openai/"
+    return base if base.endswith("/v1") else base + "/v1"
+
+
+def get_openai_base_url() -> str | None:
+    raw = os.environ.get("OPENAI_BASE_URL", "").strip()
+    return _openai_compat_url(raw) if raw else None
+
+
 def red_openai_client_kwargs() -> dict:
-    return {"api_key": get_openai_api_key() or None}
+    kwargs = {"api_key": get_openai_api_key() or None}
+    if get_openai_base_url():
+        kwargs["base_url"] = get_openai_base_url()
+    return kwargs
+
+
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def gemini_api_key_env_var() -> str:
+    """Env var holding Gemini key: GEMINI_API_KEY, fallback GOOGLE_API_KEY."""
+    return "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY", "").strip() else "GOOGLE_API_KEY"
+
+
+def get_gemini_api_key() -> str:
+    return os.environ.get(gemini_api_key_env_var(), "").strip()
+
+
+def get_gemini_base_url() -> str | None:
+    return os.environ.get("GEMINI_BASE_URL", "").strip() or None
+
+
+def gemini_openai_base_url() -> str:
+    """OpenAI-compatible endpoint for GEMINI_BASE_URL (used by NeMo self-check)."""
+    base = get_gemini_base_url()
+    return _openai_compat_url(base) if base else GEMINI_OPENAI_BASE_URL
+
+
+def red_gemini_model(model: str | None = None):
+    """ADK model for Red Gemini: plain name, or ``Gemini`` bound to GEMINI_BASE_URL + key."""
+    name = model or get_red_model()
+    base = get_gemini_base_url()
+    key = get_gemini_api_key()
+    if not base and not key:
+        return name
+    from google.adk.models import Gemini
+
+    return Gemini(
+        model=name,
+        base_url=base,
+        client_kwargs={"api_key": key} if key else None,
+    )
 
 
 def red_provider_label(tier: str = "advance") -> str:
@@ -245,8 +302,8 @@ def setup_api_key():
     red = get_red_provider()
     model = get_red_model()
     if red == PROVIDER_GEMINI:
-        if not os.environ.get("GOOGLE_API_KEY", "").strip():
-            os.environ["GOOGLE_API_KEY"] = input("Enter Google API Key (Red): ").strip()
+        if not get_gemini_api_key():
+            os.environ["GEMINI_API_KEY"] = input("Enter Gemini API Key (Red): ").strip()
         os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "0"
         print(f"Red / Red Advance  — gemini:{model}")
     else:

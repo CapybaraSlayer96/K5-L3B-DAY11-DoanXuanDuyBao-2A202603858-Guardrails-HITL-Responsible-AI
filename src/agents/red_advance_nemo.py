@@ -17,7 +17,7 @@ output rails). LLM chính của Red Advance vẫn do runner OpenAI / Google ADK 
 
 Self-check dùng chính model Red trong ``.env`` qua engine ``openai`` (mặc định
 của NeMo ≥ 0.22, không cần LangChain). Gemini đi qua endpoint tương thích OpenAI
-của Google AI Studio, cùng ``GOOGLE_API_KEY``.
+(``GEMINI_BASE_URL`` nếu có, mặc định Google AI Studio), key ``GEMINI_API_KEY``.
 
 Fail-closed: NeMo lỗi (mất mạng, sai key, hết quota…) thì request bị chặn.
 
@@ -36,7 +36,11 @@ from typing import Any, Optional
 from agents.security_boundary import contains_secret, normalize_for_security
 from core.config import (
     DEMO_SECRETS,
+    GEMINI_OPENAI_BASE_URL,
     PROVIDER_GEMINI,
+    gemini_api_key_env_var,
+    gemini_openai_base_url,
+    get_openai_base_url,
     get_red_model,
     get_red_provider,
 )
@@ -45,7 +49,6 @@ from core.config import (
 os.environ.setdefault("NEMO_GUARDRAILS_NO_USAGE_STATS", "1")
 
 NEMO_MIN_VERSION = "0.24.1"
-GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 INPUT_RAIL_PROTECTED = "vinbank protected value check"
 INPUT_RAIL_SELF_CHECK = "self check input"
@@ -234,15 +237,18 @@ def _model_entry(provider: str, model: str) -> dict:
             "type": "main",
             "engine": "openai",
             "model": model,
-            "api_key_env_var": "GOOGLE_API_KEY",
-            "parameters": {"base_url": GEMINI_OPENAI_BASE_URL},
+            "api_key_env_var": gemini_api_key_env_var(),
+            "parameters": {"base_url": gemini_openai_base_url()},
         }
-    return {
+    entry = {
         "type": "main",
         "engine": "openai",
         "model": model,
         "api_key_env_var": "OPENAI_API_KEY",
     }
+    if get_openai_base_url():
+        entry["parameters"] = {"base_url": get_openai_base_url()}
+    return entry
 
 
 def build_rails_dict(
@@ -290,7 +296,7 @@ def build_rails_config(
         if "environment variable" in str(exc):
             raise RuntimeError(
                 "NeMo Guardrails của Red Advance cần API key Red trong môi trường "
-                "(OPENAI_API_KEY hoặc GOOGLE_API_KEY). Kiểm tra file .env."
+                "(OPENAI_API_KEY hoặc GEMINI_API_KEY). Kiểm tra file .env."
             ) from exc
         raise
 

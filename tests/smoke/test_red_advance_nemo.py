@@ -53,6 +53,7 @@ def test_requirements_include_nemoguardrails():
 def test_rails_config_uses_red_model_and_all_rails(provider, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dummy")
     monkeypatch.setenv("GOOGLE_API_KEY", "test-dummy")
+    monkeypatch.delenv("GEMINI_BASE_URL", raising=False)
     config = build_rails_config(provider=provider, model="m-test")
 
     main = config.models[0]

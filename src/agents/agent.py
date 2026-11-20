@@ -79,8 +79,10 @@ def create_red_agent_default():
         from google.adk.agents import llm_agent
         from google.adk import runners
 
+        from core.config import red_gemini_model
+
         agent = llm_agent.LlmAgent(
-            model=soft,
+            model=red_gemini_model(soft),
             name="red_agent_default",
             instruction=RED_DEFAULT_INSTRUCTION,
         )
